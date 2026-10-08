@@ -30,7 +30,7 @@ mod tray;
 mod webview_drop;
 
 use std::process::Command;
-use std::sync::atomic::Ordering;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 use serde::Serialize;
@@ -42,7 +42,7 @@ use files::DroppedFile;
 use hooks::{HookPreview, HookStatus};
 use island::{PollGate, ScreenInfo};
 use pipe::Pending;
-use settings::Settings;
+use settings::{IslandOffset, Settings};
 
 pub struct Shared {
     pub settings: Mutex<Settings>,
@@ -88,6 +88,8 @@ fn save_settings(app: AppHandle, shared: State<Shared>, settings: Settings) {
         // Where Mochi sits on the desktop is desktop.rs's to say, not a webview's.
         let mut settings = settings.clone();
         settings.desktop_mochi = current.desktop_mochi.clone();
+        // Likewise where the island was dragged to (begin_island_drag).
+        settings.island_offset = current.island_offset;
         *current = settings;
         (screen_changed, autostart_changed, shortcuts_changed)
     };
@@ -104,7 +106,7 @@ fn save_settings(app: AppHandle, shared: State<Shared>, settings: Settings) {
     }
     if screen_changed {
         let collapsed = shared.gate.collapsed.load(Ordering::Relaxed);
-        island::apply_geometry(&app, &settings.screen, collapsed);
+        island::apply_geometry(&app, &settings.screen, collapsed, settings.island_offset);
     }
     integrations::settings_saved(&app, &settings.active_integrations);
     if shortcuts_changed {
@@ -139,9 +141,12 @@ fn language_changed(app: &AppHandle) {
 /// cursor poll; anything else → full panel and 60 Hz polling.
 #[tauri::command]
 fn set_collapsed(app: AppHandle, shared: State<Shared>, collapsed: bool) {
-    let pref = shared.settings.lock().unwrap().screen.clone();
+    let (pref, offset) = {
+        let settings = shared.settings.lock().unwrap();
+        (settings.screen.clone(), settings.island_offset)
+    };
     shared.gate.collapsed.store(collapsed, Ordering::Relaxed);
-    island::apply_geometry(&app, &pref, collapsed);
+    island::apply_geometry(&app, &pref, collapsed, offset);
     // The wake strip must always take the mouse, and a resize invalidates the flag.
     island::refresh_click_through(&app, &shared.gate);
     shared.gate.set_active(!collapsed);
@@ -152,6 +157,15 @@ fn set_collapsed(app: AppHandle, shared: State<Shared>, collapsed: bool) {
 #[tauri::command]
 fn set_island_rect(app: AppHandle, shared: State<Shared>, x: f64, y: f64, width: f64, height: f64) {
     shared.gate.set_rect(island::IslandRect { x, y, w: width, h: height });
+    // A dragged island that grew past an edge of the display slides back in.
+    let (pref, offset) = {
+        let settings = shared.settings.lock().unwrap();
+        (settings.screen.clone(), settings.island_offset)
+    };
+    if offset != IslandOffset::default() {
+        let collapsed = shared.gate.collapsed.load(Ordering::Relaxed);
+        island::keep_on_display(&app, &pref, collapsed, offset);
+    }
     // Without the cursor poll the input region is the click-through: it follows the island.
     if !platform::CURSOR_POLL {
         island::refresh_click_through(&app, &shared.gate);
@@ -169,9 +183,81 @@ fn focus_window(app: AppHandle, focused: bool) {
 
 #[tauri::command]
 fn reposition(app: AppHandle, shared: State<Shared>) {
-    let pref = shared.settings.lock().unwrap().screen.clone();
+    let (pref, offset) = {
+        let settings = shared.settings.lock().unwrap();
+        (settings.screen.clone(), settings.island_offset)
+    };
     let collapsed = shared.gate.collapsed.load(Ordering::Relaxed);
-    island::apply_geometry(&app, &pref, collapsed);
+    island::apply_geometry(&app, &pref, collapsed, offset);
+}
+
+/// A drag of the island is in flight (the front end can press twice).
+static ISLAND_DRAGGING: AtomicBool = AtomicBool::new(false);
+
+/// The user pressed the island's grip: follow the cursor, and move the window
+/// with it, until the left button comes up. Rust owns the loop because the
+/// window moves under the cursor, so the page's own coordinates would lag.
+#[tauri::command]
+fn begin_island_drag(app: AppHandle, shared: State<Shared>) {
+    if !platform::CURSOR_POLL || ISLAND_DRAGGING.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    let Some(from) = platform::cursor_physical() else {
+        ISLAND_DRAGGING.store(false, Ordering::SeqCst);
+        return;
+    };
+    let (pref, start) = {
+        let settings = shared.settings.lock().unwrap();
+        (settings.screen.clone(), settings.island_offset)
+    };
+    std::thread::spawn(move || {
+        let shared = app.state::<Shared>();
+        let mut last = start;
+        while platform::left_button_down() {
+            if let Some(to) = platform::cursor_physical() {
+                let collapsed = shared.gate.collapsed.load(Ordering::Relaxed);
+                let next = island::dragged_offset(&app, &pref, collapsed, start, from, to);
+                if next != last {
+                    // Stored at every step, so a resize in the middle of the
+                    // drag (the island closing) keeps the place reached so far.
+                    shared.settings.lock().unwrap().island_offset = next;
+                    island::move_to(&app, &pref, collapsed, next);
+                    if (next.y > 0.0) != (last.y > 0.0) {
+                        let _ = app.emit_to(island::WINDOW_LABEL, "island-offset", next);
+                    }
+                    last = next;
+                }
+            }
+            std::thread::sleep(std::time::Duration::from_millis(8));
+        }
+        island_moved(&app, &shared, last);
+        ISLAND_DRAGGING.store(false, Ordering::SeqCst);
+    });
+}
+
+/// Back to the top centre (double click on the grip).
+#[tauri::command]
+fn reset_island_position(app: AppHandle, shared: State<Shared>) {
+    let (pref, collapsed) = {
+        let mut settings = shared.settings.lock().unwrap();
+        settings.island_offset = IslandOffset::default();
+        (settings.screen.clone(), shared.gate.collapsed.load(Ordering::Relaxed))
+    };
+    island::apply_geometry(&app, &pref, collapsed, IslandOffset::default());
+    island_moved(&app, &shared, IslandOffset::default());
+}
+
+/// The island sits at `offset` for good: remember it and tell the page.
+fn island_moved(app: &AppHandle, shared: &Shared, offset: IslandOffset) {
+    let settings = {
+        let mut settings = shared.settings.lock().unwrap();
+        settings.island_offset = offset;
+        settings.clone()
+    };
+    if let Err(err) = settings::save(&settings) {
+        log::line(format!("could not save settings: {err}"));
+    }
+    let _ = app.emit_to(island::WINDOW_LABEL, "island-offset", offset);
 }
 
 /// The displays the island can be pinned to, for Settings.
@@ -654,6 +740,8 @@ pub fn run() {
             set_island_rect,
             focus_window,
             reposition,
+            begin_island_drag,
+            reset_island_position,
             list_monitors,
             open_url,
             open_in_vscode,
@@ -730,7 +818,7 @@ pub fn run() {
                 platform::make_non_activating(&win);
                 #[cfg(windows)]
                 webview_drop::install(&handle);
-                island::apply_geometry(&handle, &loaded.screen, false);
+                island::apply_geometry(&handle, &loaded.screen, false, loaded.island_offset);
                 let _ = win.show();
             }
             gate.collapsed.store(false, Ordering::Relaxed);

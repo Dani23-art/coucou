@@ -141,6 +141,11 @@ export interface Settings {
     onDesktop: boolean;
     spot: { x: number; y: number; space: string } | null;
   };
+  /**
+   * Where the island was dragged to, as a shift in logical pixels from the top
+   * centre of its display. Rust owns it: whatever the page sends back is ignored.
+   */
+  islandOffset?: { x: number; y: number };
 }
 
 export const DEFAULT_SETTINGS: Settings = {

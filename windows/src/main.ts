@@ -36,6 +36,7 @@ async function main() {
   // Rust shows the tray and its errors in the same language as the webview.
   void Bridge.setSystemLanguages(systemLanguages());
   island.applySettings();
+  island.setIslandOffset(State.settings.islandOffset);
   State.loadIntegrationTasks();
   if (boot && !boot.cursorPoll) island.followPageCursor();
   await island.desktop.init();
@@ -77,6 +78,7 @@ async function main() {
   });
 
   await onEvent<null>("screen-changed", () => void Bridge.reposition());
+  await onEvent<{ x: number; y: number }>("island-offset", (offset) => island.setIslandOffset(offset));
 
   // The settings window writes preferences; apply them here without a restart.
   await onEvent<Settings>("settings-changed", (s) => {

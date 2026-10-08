@@ -13,6 +13,7 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, Monitor, PhysicalPosition, PhysicalSize, WebviewWindow};
 
 use crate::platform::{self, cursor_physical, left_button_down};
+use crate::settings::IslandOffset;
 
 /// Logical size of the full window — the largest island view, like the macOS panel.
 pub const PANEL_W: f64 = 720.0;
@@ -247,6 +248,30 @@ mod display_tests {
     }
 
     #[test]
+    fn a_dragged_island_reaches_every_edge_of_its_display() {
+        let at = |x, y| IslandOffset { x, y };
+        // A 200 x 32 pill on 1920 x 1080 may shift 860 px sideways, 1048 px down.
+        let pill = (200.0, 32.0);
+        assert_eq!(clamp_within(at(100.0, 50.0), 1920.0, 1080.0, pill), at(100.0, 50.0));
+        assert_eq!(clamp_within(at(-2000.0, -20.0), 1920.0, 1080.0, pill), at(-860.0, 0.0));
+        assert_eq!(clamp_within(at(2000.0, 2000.0), 1920.0, 1080.0, pill), at(860.0, 1048.0));
+    }
+
+    #[test]
+    fn a_bigger_island_stops_sooner() {
+        let at = |x, y| IslandOffset { x, y };
+        // The same drag with the 640 x 176 open island: 640 px sideways, 904 down.
+        let open = (640.0, 176.0);
+        assert_eq!(clamp_within(at(2000.0, 2000.0), 1920.0, 1080.0, open), at(640.0, 904.0));
+    }
+
+    #[test]
+    fn a_display_smaller_than_the_island_pins_it_to_the_top_centre() {
+        let at = |x, y| IslandOffset { x, y };
+        assert_eq!(clamp_within(at(40.0, 40.0), 500.0, 100.0, (640.0, 176.0)), at(0.0, 0.0));
+    }
+
+    #[test]
     fn a_display_is_found_again_after_changes() {
         let dell = d("DELL U2720Q", 1920, 0, 2560, 1440);
         let lap = d("eDP-1", 0, 0, 1920, 1200);
@@ -298,20 +323,54 @@ pub fn screen_info(app: &AppHandle, pref: &str) -> ScreenInfo {
     }
 }
 
-/// Places and sizes the window. `collapsed` picks the wake strip instead of the panel.
-pub fn apply_geometry(app: &AppHandle, pref: &str, collapsed: bool) {
-    let Some(win) = window(app) else { return };
-    let Some(m) = target_monitor(app, pref) else { return };
+/// Logical size of what is drawn now: the island shape the page reported, or
+/// the wake strip while hidden. This is what has to stay on the display; the
+/// window around it is transparent and may hang over an edge.
+fn extent(app: &AppHandle, collapsed: bool) -> (f64, f64) {
+    if collapsed {
+        return (STRIP_W, STRIP_H);
+    }
+    let Some(shared) = app.try_state::<crate::Shared>() else { return (PANEL_W, PANEL_H) };
+    let r = *shared.gate.rect.lock().unwrap();
+    if r.w > 0.0 { (r.w, r.h) } else { (PANEL_W, PANEL_H) }
+}
 
+/// Keeps a dragged island on its display, edge to edge: the island is centred
+/// in its window, so its centre is the window's, and the offset is a shift of
+/// that centre from the middle of the display.
+fn clamp_offset(m: &Monitor, offset: IslandOffset, extent: (f64, f64)) -> IslandOffset {
+    let scale = m.scale_factor();
+    let size = m.size();
+    clamp_within(offset, size.width as f64 / scale, size.height as f64 / scale, extent)
+}
+
+/// `clamp_offset` for a display of `width` x `height` logical pixels.
+fn clamp_within(offset: IslandOffset, width: f64, height: f64, extent: (f64, f64)) -> IslandOffset {
+    let max_x = ((width - extent.0) / 2.0).max(0.0);
+    let max_y = (height - extent.1).max(0.0);
+    IslandOffset { x: offset.x.clamp(-max_x, max_x), y: offset.y.clamp(0.0, max_y) }
+}
+
+/// Top-left corner and size, in physical pixels, of the island window on `m`.
+fn placement(m: &Monitor, collapsed: bool, offset: IslandOffset, extent: (f64, f64)) -> (i32, i32, u32, u32) {
     let scale = m.scale_factor();
     let mp = *m.position();
     let ms = *m.size();
-
     let (lw, lh) = if collapsed { (STRIP_W, STRIP_H) } else { (PANEL_W, PANEL_H) };
     let pw = (lw * scale).round().max(1.0) as u32;
     let ph = (lh * scale).round().max(1.0) as u32;
-    let x = mp.x + (ms.width as i32 - pw as i32) / 2;
-    let y = mp.y;
+    let offset = clamp_offset(m, offset, extent);
+    let x = mp.x + (ms.width as i32 - pw as i32) / 2 + (offset.x * scale).round() as i32;
+    let y = mp.y + (offset.y * scale).round() as i32;
+    (x, y, pw, ph)
+}
+
+/// Places and sizes the window. `collapsed` picks the wake strip instead of the panel.
+pub fn apply_geometry(app: &AppHandle, pref: &str, collapsed: bool, offset: IslandOffset) {
+    let Some(win) = window(app) else { return };
+    let Some(m) = target_monitor(app, pref) else { return };
+
+    let (x, y, pw, ph) = placement(&m, collapsed, offset, extent(app, collapsed));
 
     // GTK never sizes a non-resizable window below its natural size (200 px
     // here), so on Linux the 6 px wake strip would stay a 200 px block. tao
@@ -327,6 +386,45 @@ pub fn apply_geometry(app: &AppHandle, pref: &str, collapsed: bool) {
     // Moving across displays can rescale the window: re-assert the physical size.
     let _ = win.set_size(PhysicalSize::new(pw, ph));
     let _ = win.set_always_on_top(true);
+}
+
+/// The offset a drag reaches when the cursor goes from `from` to `to` (physical
+/// pixels), kept on the display.
+pub fn dragged_offset(
+    app: &AppHandle,
+    pref: &str,
+    collapsed: bool,
+    start: IslandOffset,
+    from: (f64, f64),
+    to: (f64, f64),
+) -> IslandOffset {
+    let Some(m) = target_monitor(app, pref) else { return start };
+    let scale = m.scale_factor();
+    let wanted = IslandOffset { x: start.x + (to.0 - from.0) / scale, y: start.y + (to.1 - from.1) / scale };
+    clamp_offset(&m, wanted, extent(app, collapsed))
+}
+
+/// Moves the window to `offset` and leaves its size alone: what a drag does on
+/// every step, so it must stay cheap.
+pub fn move_to(app: &AppHandle, pref: &str, collapsed: bool, offset: IslandOffset) {
+    let Some(win) = window(app) else { return };
+    let Some(m) = target_monitor(app, pref) else { return };
+    let (x, y, _, _) = placement(&m, collapsed, offset, extent(app, collapsed));
+    let _ = win.set_position(PhysicalPosition::new(x, y));
+}
+
+/// The island changed size: if it now reaches past an edge of the display, or
+/// has room to go back to where it was dragged, the window follows. Does
+/// nothing in the common case, so it is fine to ask on every frame of the
+/// island opening.
+pub fn keep_on_display(app: &AppHandle, pref: &str, collapsed: bool, offset: IslandOffset) {
+    let Some(win) = window(app) else { return };
+    let Some(m) = target_monitor(app, pref) else { return };
+    let (x, y, _, _) = placement(&m, collapsed, offset, extent(app, collapsed));
+    if win.outer_position().is_ok_and(|p| p.x == x && p.y == y) {
+        return;
+    }
+    let _ = win.set_position(PhysicalPosition::new(x, y));
 }
 
 /// Position, size and scale of the monitor the island lives on. Any change here

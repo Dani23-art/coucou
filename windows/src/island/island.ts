@@ -41,6 +41,16 @@ const PRE_PROGRESS = USC.T_PROG_START - USC.T_DROP;
 
 const modeOrder = (m: IslandMode) => (m === "hidden" ? 0 : m === "compact" ? 1 : 2);
 
+/**
+ * True for a spot of the island that does nothing of its own: not a control,
+ * and not text meant to be selected (a double click selects a word there).
+ */
+function isBareSurface(el: Element): boolean {
+  if (el.closest("button, a, input, textarea, select, label, [contenteditable], [role='button']")) return false;
+  const style = getComputedStyle(el);
+  return style.cursor !== "pointer" && style.cursor !== "text" && style.userSelect !== "text";
+}
+
 export class Island {
   readonly fsm = new IslandStateMachine();
   /** Mochi on the desktop: his life cycle and the drag out of the island. */
@@ -57,6 +67,16 @@ export class Island {
   private miniGrid!: HTMLElement;
   private countdown!: HTMLElement;
   private wakeStrip!: HTMLElement;
+  /** The handle that moves the island; it shows while the pointer is over it. */
+  private gripEl!: HTMLElement;
+  /** The island was dragged below the top edge, so it has no edge to hang from. */
+  private floating = false;
+  /**
+   * The island was already open when the last press landed. A double click on
+   * the compact island is a click that opens it plus one more: only a press on
+   * an open island may close it again.
+   */
+  private openAtPress = false;
 
   private header!: ViewHost;
   private views!: Map<IslandViewName, ViewHost>;
@@ -279,6 +299,7 @@ export class Island {
       this.uploadCanvas.el,
       this.contentEl,
     );
+    this.gripEl = h("div", { id: "island-grip" });
     this.islandEl = h(
       "div",
       { id: "island" },
@@ -287,6 +308,7 @@ export class Island {
       this.botCanvas,
       this.miniGrid,
       this.countdown,
+      this.gripEl,
     );
 
     const dpr = Math.min(2, window.devicePixelRatio || 1);
@@ -639,7 +661,7 @@ export class Island {
     const r = this.radius.value;
     this.islandEl.style.width = `${w}px`;
     this.islandEl.style.height = `${hh}px`;
-    this.islandEl.style.borderRadius = `0 0 ${r}px ${r}px`;
+    this.islandEl.style.borderRadius = this.floating ? `${r}px` : `0 0 ${r}px ${r}px`;
     this.islandEl.style.transform = `translateX(-50%)`;
     // These follow the island as it resizes, so they belong here rather than in
     // the state-driven DOM sync.
@@ -695,9 +717,25 @@ export class Island {
       if (State.mode === "hidden") this.fsm.mouseEntered();
     });
 
+    // The grip moves the island. It swallows the press so the island under it
+    // neither opens nor takes it for a click on Mochi.
+    this.gripEl.addEventListener("mousedown", (e) => {
+      e.stopPropagation();
+      if (e.button !== 0) return;
+      e.preventDefault();
+      Sound.resume();
+      State.lastActivity = performance.now();
+      void Bridge.beginIslandDrag();
+    });
+    this.gripEl.addEventListener("dblclick", (e) => {
+      e.stopPropagation();
+      void Bridge.resetIslandPosition();
+    });
+
     this.islandEl.addEventListener("mousedown", (e) => {
       Sound.resume();
       State.lastActivity = performance.now();
+      this.openAtPress = State.mode === "expanded";
       // A press on Mochi may become a drag out to the desktop.
       if (e.button === 0 && this.isBotHit(e.clientX, e.clientY)) {
         this.botPress = { x: e.clientX, y: e.clientY };
@@ -716,6 +754,15 @@ export class Island {
         this.cancelBotHover();
         this.engine.slap();
       }
+    });
+
+    // Double click on the bare island closes it, like Escape does.
+    this.islandEl.addEventListener("dblclick", (e) => {
+      if (!this.openAtPress || State.mode !== "expanded") return;
+      if (this.isBotHit(e.clientX, e.clientY)) return;
+      if (!(e.target instanceof Element) || !isBareSurface(e.target)) return;
+      if (State.pendingApproval) this.foldApproval();
+      else if (!State.isPinned) this.collapse();
     });
 
     // No browser menu over Mochi: his right-click is the wardrobe. Everywhere
@@ -772,6 +819,8 @@ export class Island {
    * reported as a cursor far away, which is what the poll would have said.
    */
   followPageCursor() {
+    // Rust moves the island by reading the global cursor: without it, no grip.
+    this.gripEl.style.display = "none";
     window.addEventListener("mousemove", (e) => this.onCursor(e.clientX, e.clientY));
     window.addEventListener("mouseout", (e) => {
       if (e.relatedTarget == null) this.onCursor(-10_000, -10_000);
@@ -1142,6 +1191,17 @@ export class Island {
   }
 
   /** Applies settings coming from Rust at boot. */
+  /**
+   * The island was dragged (or put back): once it hangs below the top edge it
+   * gets rounded top corners too.
+   */
+  setIslandOffset(offset: { x: number; y: number } | undefined) {
+    const floating = (offset?.y ?? 0) > 0.5;
+    if (floating === this.floating) return;
+    this.floating = floating;
+    this.applyGeometry();
+  }
+
   applySettings() {
     Sound.setEnabled(State.settings.soundEnabled);
     Sound.setVolume(State.settings.soundVolume);

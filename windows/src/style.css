@@ -87,6 +87,36 @@ body {
   border-radius: inherit;
 }
 
+/* The handle that moves the island. Shows only while the pointer is on the
+   island; the pseudo-element makes it easier to hit than it looks. */
+#island-grip {
+  position: absolute;
+  left: 50%;
+  bottom: 3px;
+  width: 36px;
+  height: 5px;
+  margin-left: -18px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.3);
+  opacity: 0;
+  cursor: grab;
+  transition: opacity 0.15s ease-in-out;
+}
+
+#island-grip::before {
+  content: "";
+  position: absolute;
+  inset: -7px -10px;
+}
+
+#island:hover #island-grip {
+  opacity: 1;
+}
+
+#island-grip:active {
+  cursor: grabbing;
+}
+
 #bot-canvas,
 #greeting-canvas {
   position: absolute;

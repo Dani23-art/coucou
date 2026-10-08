@@ -53,6 +53,12 @@ export const Bridge = {
 
   reposition: () => call<void>("reposition"),
 
+  /** The grip was pressed: Rust moves the island with the cursor until the button comes up. */
+  beginIslandDrag: () => call<void>("begin_island_drag"),
+
+  /** Back to the top centre. */
+  resetIslandPosition: () => call<void>("reset_island_position"),
+
   /** Displays the island can be pinned to: `key` is what `settings.screen` stores. */
   listMonitors: () => call<{ key: string; label: string }[]>("list_monitors"),
 
@@ -313,7 +319,8 @@ export type BridgeEvent =
   | { name: "cursor"; payload: { x: number; y: number } }
   | { name: "tray"; payload: string }
   | { name: "hook"; payload: Record<string, unknown> }
-  | { name: "screen-changed"; payload: null };
+  | { name: "screen-changed"; payload: null }
+  | { name: "island-offset"; payload: { x: number; y: number } };
 
 export interface DragDropPayload {
   type: "enter" | "over" | "drop" | "leave";

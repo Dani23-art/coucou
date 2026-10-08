@@ -61,6 +61,19 @@ pub struct Settings {
     /// Mochi on the desktop: whether he lives there, and his spot. Owned by
     /// the Rust side (desktop.rs) — what a webview sends back is ignored.
     pub desktop_mochi: DesktopMochiPref,
+    /// Where the user dragged the island, as a shift from its default spot
+    /// (top centre of the chosen display), in logical pixels. Owned by the Rust
+    /// side (island.rs) — what a webview sends back is ignored.
+    pub island_offset: IslandOffset,
+}
+
+/// A shift of the island from the top centre of its display. x is signed (left
+/// to right), y is never negative (0 = flush with the top edge).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct IslandOffset {
+    pub x: f64,
+    pub y: f64,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -114,6 +127,7 @@ impl Default for Settings {
             mochi_outfit: "auto".into(),
             language: String::new(),
             desktop_mochi: DesktopMochiPref::default(),
+            island_offset: IslandOffset::default(),
         }
     }
 }
@@ -387,7 +401,8 @@ mod tests {
   "shortcuts": { "openChat": { "keys": "Ctrl+Shift+K", "enabled": false } },
   "mochiOutfit": "witchHat",
   "language": "pt-BR",
-  "desktopMochi": { "onDesktop": true, "spot": { "x": 1500.5, "y": -300.0, "space": "screen" } }
+  "desktopMochi": { "onDesktop": true, "spot": { "x": 1500.5, "y": -300.0, "space": "screen" } },
+  "islandOffset": { "x": -120.5, "y": 48.0 }
 }"#;
 
     fn custom() -> Value {
@@ -483,6 +498,14 @@ mod tests {
         assert_eq!(loaded.mochi_outfit, "auto");
         assert_eq!(loaded.model, "some-model");
         assert!(!loaded.sound_enabled);
+    }
+
+    #[test]
+    fn a_file_from_before_the_movable_island_keeps_it_at_the_top_centre() {
+        let loaded = parse(&custom_with("islandOffset", None)).unwrap();
+        assert_eq!(loaded.island_offset, IslandOffset::default());
+        let loaded = parse(&custom_with("islandOffset", Some(json!({ "x": 30.0 })))).unwrap();
+        assert_eq!(loaded.island_offset, IslandOffset { x: 30.0, y: 0.0 });
     }
 
     #[test]
@@ -771,6 +794,7 @@ mod tests {
                 "mochiOutfit",
                 "language",
                 "desktopMochi",
+                "islandOffset",
             ]
         );
         let _ = std::fs::remove_dir_all(&dir);
