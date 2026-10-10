@@ -14,30 +14,30 @@ const day = (y, m, d) => new Date(y, m - 1, d, 12);
 const season = (y, m, d) => seasonalOutfit(day(y, m, d));
 
 test("witch hat from October 1 to November 1", () => {
-  assert.equal(season(2026, 9, 30), "none");
+  assert.equal(season(2026, 9, 30), "cyberpunk");
   assert.equal(season(2026, 10, 1), "witchHat");
   assert.equal(season(2026, 10, 31), "witchHat");
   assert.equal(season(2026, 11, 1), "witchHat");
-  assert.equal(season(2026, 11, 2), "none");
+  assert.equal(season(2026, 11, 2), "cyberpunk");
 });
 
 test("Santa hat from December 1 to 26", () => {
-  assert.equal(season(2026, 11, 30), "none");
+  assert.equal(season(2026, 11, 30), "cyberpunk");
   assert.equal(season(2026, 12, 1), "santaHat");
   assert.equal(season(2026, 12, 26), "santaHat");
-  assert.equal(season(2026, 12, 27), "none");
+  assert.equal(season(2026, 12, 27), "cyberpunk");
 });
 
 test("party hat from December 31 to January 2", () => {
-  assert.equal(season(2026, 12, 30), "none");
+  assert.equal(season(2026, 12, 30), "cyberpunk");
   assert.equal(season(2026, 12, 31), "partyHat");
   assert.equal(season(2027, 1, 1), "partyHat");
   assert.equal(season(2027, 1, 2), "partyHat");
-  assert.equal(season(2027, 1, 3), "none");
+  assert.equal(season(2027, 1, 3), "cyberpunk");
 });
 
 test("nothing around Valentine's day (the hearts headband is gone)", () => {
-  for (const d of [12, 13, 15, 16]) assert.equal(season(2026, 2, d), "none");
+  for (const d of [12, 13, 15, 16]) assert.equal(season(2026, 2, d), "cyberpunk");
 });
 
 test("Easter falls where the calendar says", () => {
@@ -49,17 +49,17 @@ test("Easter falls where the calendar says", () => {
 
 test("bunny ears from two days before Easter to the day after", () => {
   // Easter 2026 = April 5
-  assert.equal(season(2026, 4, 2), "none");
+  assert.equal(season(2026, 4, 2), "cyberpunk");
   for (const d of [3, 4, 5, 6]) assert.equal(season(2026, 4, d), "bunnyEars", `April ${d}`);
-  assert.equal(season(2026, 4, 7), "none");
+  assert.equal(season(2026, 4, 7), "cyberpunk");
   // Easter 2027 = March 28
   assert.equal(season(2027, 3, 26), "bunnyEars");
   assert.equal(season(2027, 3, 29), "bunnyEars");
-  assert.equal(season(2027, 3, 30), "none");
+  assert.equal(season(2027, 3, 30), "cyberpunk");
   // Easter 2028 = April 16
   assert.equal(season(2028, 4, 14), "bunnyEars");
   assert.equal(season(2028, 4, 17), "bunnyEars");
-  assert.equal(season(2028, 4, 18), "none");
+  assert.equal(season(2028, 4, 18), "cyberpunk");
 });
 
 test("a daylight-saving change just before Easter doesn't shift the count", () => {
@@ -67,14 +67,14 @@ test("a daylight-saving change just before Easter doesn't shift the count", () =
   // and late-evening dates must count the same days as noon.
   assert.equal(seasonalOutfit(new Date(2026, 3, 3, 0, 0)), "bunnyEars");
   assert.equal(seasonalOutfit(new Date(2026, 3, 6, 23, 59)), "bunnyEars");
-  assert.equal(seasonalOutfit(new Date(2026, 3, 7, 0, 0)), "none");
+  assert.equal(seasonalOutfit(new Date(2026, 3, 7, 0, 0)), "cyberpunk");
 });
 
 test("sunglasses from June 21 to August 31", () => {
-  assert.equal(season(2026, 6, 20), "none");
+  assert.equal(season(2026, 6, 20), "cyberpunk");
   assert.equal(season(2026, 6, 21), "sunglasses");
   assert.equal(season(2026, 8, 31), "sunglasses");
-  assert.equal(season(2026, 9, 1), "none");
+  assert.equal(season(2026, 9, 1), "cyberpunk");
 });
 
 test("auto dresses for the season, any other choice is worn as is", () => {
@@ -86,7 +86,7 @@ test("auto dresses for the season, any other choice is worn as is", () => {
 
 test("the stored values are the Mac's, in the wardrobe's order", () => {
   assert.deepEqual([...OUTFIT_SELECTIONS], [
-    "auto", "none", "partyHat", "beanie", "crown", "sunglasses", "roundGlasses",
+    "auto", "none", "cyberpunk", "partyHat", "beanie", "crown", "sunglasses", "roundGlasses",
     "bow", "scarf", "witchHat", "pumpkin", "santaHat", "bunnyEars",
   ]);
   for (const sel of OUTFIT_SELECTIONS) assert.ok(OUTFIT_LABELS[sel], `${sel} has a label`);
@@ -119,12 +119,12 @@ test("the wardrobe header names the hovered outfit, else the current choice", ()
   assert.equal(wardrobeHeader(null, "crown", d), "Crown");
   assert.equal(wardrobeHeader("auto", "crown", d), "Auto · follows the seasons (now: Witch hat)");
   assert.equal(wardrobeHeader("scarf", "auto", d), "Scarf");
-  assert.equal(wardrobeHeader(null, "auto", day(2026, 5, 1)), "Auto · None");
+  assert.equal(wardrobeHeader(null, "auto", day(2026, 5, 1)), "Auto · Cyberpunk");
 });
 
 test("the per-frame season lookup follows the calendar day", () => {
   const cache = new SeasonCache();
-  assert.equal(cache.get("auto", day(2026, 9, 30)), "none");
+  assert.equal(cache.get("auto", day(2026, 9, 30)), "cyberpunk");
   assert.equal(cache.get("auto", new Date(2026, 9, 1, 0, 0, 1)), "witchHat");
   assert.equal(cache.get("bow", day(2026, 10, 1)), "bow");
   assert.equal(cache.get("auto", day(2026, 12, 2)), "santaHat");

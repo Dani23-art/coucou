@@ -741,6 +741,68 @@ function roundGlasses(ctx: Ctx, H: Head, body: Path2D) {
 
 // ── Scarf ─────────────────────────────────────────────────────────────────────
 
+/** Neon visor: dark glass, yellow rim, cyan scan line, and a short glitch tear. */
+function cyberpunk(ctx: Ctx, H: Head, body: Path2D, simple: boolean) {
+  const [l, r] = eyeFrames(H);
+  if (!l.visible && !r.visible) return;
+  const w = H.R * 0.62;
+  const h = H.R * 0.42;
+  // About one frame in sixty, for a moment, the visor jumps sideways and splits red/cyan.
+  const glitch = Math.floor(performance.now() / 83) % 60 === 0;
+  const jx = glitch ? H.R * 0.1 : 0;
+  let x0: number;
+  let x1: number;
+  let yc: number;
+  let hh: number;
+  if (l.visible && r.visible) {
+    x0 = l.x - (w / 2) * l.fx;
+    x1 = r.x + (w / 2) * r.fx;
+    yc = (l.y + r.y) / 2;
+    hh = (h * (l.fy + r.fy)) / 2;
+  } else {
+    const e = l.visible ? l : r;
+    x0 = e.x - (w / 2) * e.fx;
+    x1 = e.x + (w / 2) * e.fx;
+    yc = e.y;
+    hh = h * e.fy;
+  }
+  ctx.save();
+  ctx.clip(body);
+  ctx.lineCap = "round";
+  const visor = (dx: number) => roundRect(ctx, x0 + dx, yc - hh / 2, x1 - x0, hh, hh * 0.42);
+  if (glitch && !simple) {
+    ctx.globalAlpha = 0.55;
+    ctx.fillStyle = "#FF2E97";
+    visor(-jx * 1.4);
+    ctx.fill();
+    ctx.fillStyle = "#00F0FF";
+    visor(jx * 1.4);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+  visor(jx);
+  ctx.fillStyle = "rgba(6,6,12,0.9)";
+  ctx.fill();
+  ctx.lineWidth = H.R * 0.05;
+  ctx.strokeStyle = "#FCEE0A";
+  ctx.stroke();
+  if (!simple) {
+    ctx.beginPath();
+    ctx.moveTo(x0 + hh * 0.35 + jx, yc - hh * 0.1);
+    ctx.lineTo(x1 - hh * 0.35 + jx, yc - hh * 0.1);
+    ctx.lineWidth = H.R * 0.03;
+    ctx.strokeStyle = "#00F0FF";
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(x0 + (x1 - x0) * 0.55 + jx, yc + hh * 0.72);
+    ctx.lineTo(x1 + w * 0.18 + jx, yc + hh * 0.72);
+    ctx.lineWidth = H.R * 0.04;
+    ctx.strokeStyle = "#FF2E97";
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
 function scarf(ctx: Ctx, H: Head) {
   const s = 1.05;
   const y0 = -0.34;
@@ -976,7 +1038,7 @@ function withLayer(ctx: Ctx, alpha: number, fn: (c: Ctx) => void) {
 }
 
 /** Glasses, bow, scarf and pumpkin are on the face: behind the head once it has turned away. */
-const ON_FACE: ReadonlySet<Outfit> = new Set(["sunglasses", "roundGlasses", "bow", "scarf", "pumpkin"]);
+const ON_FACE: ReadonlySet<Outfit> = new Set(["sunglasses", "roundGlasses", "cyberpunk", "bow", "scarf", "pumpkin"]);
 const HATS: ReadonlySet<Outfit> = new Set(["beanie", "santaHat", "partyHat", "crown", "witchHat"]);
 
 export interface OutfitState {
@@ -994,6 +1056,7 @@ function drawFace(ctx: Ctx, outfit: Outfit, H: Head, body: Path2D, simple: boole
   switch (outfit) {
     case "sunglasses": sunglasses(ctx, H, body); break;
     case "roundGlasses": roundGlasses(ctx, H, body); break;
+    case "cyberpunk": cyberpunk(ctx, H, body, simple); break;
     case "scarf": scarf(ctx, H); break;
     case "pumpkin": pumpkin(ctx, H, body, simple); break;
     case "bow": bow(ctx, H); break;
@@ -1051,7 +1114,7 @@ export function drawOutfitFront(ctx: Ctx, outfit: Outfit, H: Head, st: OutfitSta
     const hatScale = 0.85 + 0.15 * posP;
     ctx.translate(0, -(1 - posP) * H.ry);
     ctx.scale(hatScale, hatScale);
-  } else if (outfit === "sunglasses" || outfit === "roundGlasses") {
+  } else if (outfit === "sunglasses" || outfit === "roundGlasses" || outfit === "cyberpunk") {
     ctx.translate(0, (1 - p) * 0.25 * H.ry);
   } else if (outfit === "scarf") {
     ctx.translate(0, (1 - p) * 0.3 * H.ry);

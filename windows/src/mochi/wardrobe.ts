@@ -7,7 +7,7 @@ import { N_, labels, t } from "../i18n/i18n";
 
 /** Every outfit, plus "auto" (dress for the season) and "none". Order of the wardrobe. */
 export const OUTFIT_SELECTIONS = [
-  "auto", "none", "partyHat", "beanie", "crown", "sunglasses", "roundGlasses",
+  "auto", "none", "cyberpunk", "partyHat", "beanie", "crown", "sunglasses", "roundGlasses",
   "bow", "scarf", "witchHat", "pumpkin", "santaHat", "bunnyEars",
 ] as const;
 
@@ -25,6 +25,7 @@ export const DEFAULT_OUTFIT: OutfitSelection = "auto";
 export const OUTFIT_KEYS: Record<OutfitSelection, string> = {
   auto: N_("Auto (seasons)"),
   none: N_("None"),
+  cyberpunk: N_("Cyberpunk"),
   partyHat: N_("Party hat"),
   beanie: N_("Beanie"),
   crown: N_("Crown"),
@@ -84,7 +85,7 @@ const DAY_MS = 86_400_000;
 
 /**
  * The seasonal outfit for `date`, read in the user's local calendar.
- * Priority: party hat > Santa hat > witch hat > bunny ears > sunglasses > none.
+ * Priority: party hat > Santa hat > witch hat > bunny ears > sunglasses > cyberpunk.
  */
 export function seasonalOutfit(date: Date): Outfit {
   const day = date.getDate();
@@ -104,7 +105,7 @@ export function seasonalOutfit(date: Date): Outfit {
   if (delta >= -2 && delta <= 1) return "bunnyEars";
   // Jun 21 – Aug 31
   if ((month === 6 && day >= 21) || month === 7 || month === 8) return "sunglasses";
-  return "none";
+  return "cyberpunk";
 }
 
 /** "auto" → the season's outfit; anything else is worn as chosen. */
