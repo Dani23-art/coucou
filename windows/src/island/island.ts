@@ -366,6 +366,8 @@ export class Island {
     const prev = State.mode;
     if (mode === prev) return;
     State.mode = mode;
+    // The theme's glitch animation only runs while the island is shown (src/style.css).
+    this.islandEl.dataset.mode = mode;
     if (mode === "expanded") Sound.play("open");
     if (prev === "expanded") {
       Sound.play("close");

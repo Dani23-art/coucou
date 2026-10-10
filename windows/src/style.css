@@ -2376,3 +2376,40 @@ html[data-dir="rtl"] #views :is(.bubble, .reply .md-p, .reply .md-h, .reply .md-
   unicode-bidi: plaintext;
   text-align: start;
 }
+
+/* ── Cyberpunk glitch ────────────────────────────────────────────────────────
+   Runs only while the island is shown (island.ts sets data-mode), never while
+   it is hidden, and not at all with reduced motion. About 0.15 s of glitch in
+   every 5 s; the rest of the time the text is crisp. */
+#island[data-mode="compact"],
+#island[data-mode="expanded"] {
+  box-shadow: 0 0 0 1px rgba(252, 238, 10, 0.35), 0 0 14px rgba(0, 240, 255, 0.18);
+}
+
+#island[data-mode="compact"] #island-clip,
+#island[data-mode="expanded"] #island-clip {
+  animation: cp-glitch 5s steps(1, end) infinite;
+}
+
+/* Faint scanlines over everything in the island. */
+#island-clip::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.035) 0 1px, transparent 1px 3px);
+}
+
+@keyframes cp-glitch {
+  0%, 62%, 100% { transform: none; clip-path: none; text-shadow: none; }
+  63% { transform: translateX(-4px); clip-path: inset(10% 0 62% 0); text-shadow: 2px 0 #ff2e97, -2px 0 #00f0ff; }
+  64% { transform: translateX(5px); clip-path: inset(48% 0 22% 0); text-shadow: -2px 0 #ff2e97, 2px 0 #00f0ff; }
+  65% { transform: translateX(-2px); clip-path: inset(0 0 80% 0); text-shadow: 2px 0 #00f0ff, -2px 0 #ff2e97; }
+  66% { transform: none; clip-path: none; text-shadow: none; }
+  88% { transform: translateX(3px); clip-path: inset(70% 0 12% 0); text-shadow: 1px 0 #ff2e97, -1px 0 #00f0ff; }
+  89% { transform: none; clip-path: none; text-shadow: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #island[data-mode] #island-clip { animation: none; }
+}
