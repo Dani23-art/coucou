@@ -6,19 +6,20 @@
   color-scheme: dark;
 
   /* Then the scripts of the other interface languages (see src/style.css). */
-  --font: system-ui, "Segoe UI Variable Text", "Segoe UI", "Nirmala UI", "Microsoft YaHei UI",
+  --font: "JetBrains Mono", system-ui, "Segoe UI Variable Text", "Segoe UI", "Nirmala UI", "Microsoft YaHei UI",
     "Microsoft YaHei", "Noto Sans", "Noto Sans Devanagari", "Noto Sans Bengali", "Noto Sans Arabic",
     "Noto Sans CJK SC", "Noto Sans SC", "Droid Sans Fallback", sans-serif;
-  --mono: "Cascadia Mono", "Consolas", ui-monospace, monospace;
+  --mono: "JetBrains Mono", "Cascadia Mono", "Consolas", ui-monospace, monospace;
   --ink: #f5f6f8;
   --dim: #9398a1;
   --dim-2: #6b7079;
-  --bg: #0b0c0e;
-  --card: #141518;
-  --hairline: rgba(255, 255, 255, 0.07);
-  --green: #22c55e;
-  --red: #f4505e;
-  --amber: #f5a524;
+  --bg: #07070d;
+  --card: #0c0c14;
+  --hairline: rgba(252, 238, 10, 0.12);
+  --accent: #fcee0a;
+  --green: #00f0ff;
+  --red: #ff003c;
+  --amber: #fcee0a;
 }
 
 * {
@@ -123,7 +124,7 @@ button:active:not(:disabled) {
 
 button.primary {
   background: var(--ink);
-  color: #0b0c0e;
+  color: #07070d;
 }
 
 button.primary:hover:not(:disabled) {
@@ -131,8 +132,8 @@ button.primary:hover:not(:disabled) {
 }
 
 button.danger {
-  background: rgba(244, 80, 94, 0.16);
-  color: #ff8d97;
+  background: rgba(255, 0, 60, 0.16);
+  color: #ff5c7a;
 }
 
 button:disabled {
@@ -237,11 +238,11 @@ select option {
 }
 
 .diff .add {
-  color: #86efac;
+  color: #8ffaff;
 }
 
 .diff .del {
-  color: #ff8d97;
+  color: #ff5c7a;
 }
 
 .diff .ctx {
@@ -255,18 +256,18 @@ select option {
 }
 
 .notice.ok {
-  background: rgba(34, 197, 94, 0.12);
-  color: #86efac;
+  background: rgba(0, 240, 255, 0.12);
+  color: #8ffaff;
 }
 
 .notice.err {
-  background: rgba(244, 80, 94, 0.14);
-  color: #ff8d97;
+  background: rgba(255, 0, 60, 0.14);
+  color: #ff5c7a;
 }
 
 .notice.warn {
-  background: rgba(245, 165, 36, 0.13);
-  color: #fbc06a;
+  background: rgba(252, 238, 10, 0.13);
+  color: #fff27a;
 }
 
 /* Active pills — one group per catalog category, one row per pill. */
@@ -373,13 +374,13 @@ select option {
 }
 
 .tag.warn {
-  background: rgba(245, 165, 36, 0.13);
-  color: #fbc06a;
+  background: rgba(252, 238, 10, 0.13);
+  color: #fff27a;
 }
 
 .tag.err {
-  background: rgba(244, 80, 94, 0.14);
-  color: #ff8d97;
+  background: rgba(255, 0, 60, 0.14);
+  color: #ff5c7a;
 }
 
 /* Arabic: the window reads right to left (main.ts sets <html dir="rtl">);
